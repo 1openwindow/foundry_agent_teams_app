@@ -39,7 +39,7 @@ This approach allows you to leverage your existing Foundry agents directly withi
 
 1. First, select the Microsoft 365 Agents Toolkit icon on the left in the VS Code toolbar.
 1. Configure your Microsoft Foundry connection in the environment files:
-   - In `env/.env.playground`, update:
+  - In `env/.env.playground.user` (recommended) or `env/.env.playground`, update:
      - `FOUNDRY_PROJECT_ENDPOINT`: Your Foundry project endpoint
      - `FOUNDRY_AGENT_NAME`: Your agent name (default: `mail-assistant`)
 1. Ensure you're authenticated to Azure (the app uses `DefaultAzureCredential`):
