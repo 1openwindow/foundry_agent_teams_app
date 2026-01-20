@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "resourceBaseName": {
+      "value": "bot${{RESOURCE_SUFFIX}}"
+    },
+    "foundryProjectEndpoint": {
+      "value": "${{FOUNDRY_PROJECT_ENDPOINT}}"
+    },
+    "foundryAgentName": {
+      "value": "${{FOUNDRY_AGENT_NAME}}"
+    },
+    "webAppSKU": {
+      "value": "B1"
+    },
+    "botDisplayName": {
+      "value": "mail_assistant_teams_app"
+    }
+  }
+}
