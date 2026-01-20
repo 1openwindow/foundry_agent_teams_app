@@ -14,12 +14,12 @@
         "outline": "outline.png"
     },
     "name": {
-        "short": "mail_assistant_teams_app${{APP_NAME_SUFFIX}}",
-        "full": "full name for mail_assistant_teams_app"
+        "short": "foundry_agent_teams_app${{APP_NAME_SUFFIX}}",
+        "full": "full name for foundry_agent_teams_app"
     },
     "description": {
-        "short": "short description for mail_assistant_teams_app",
-        "full": "full description for mail_assistant_teams_app"
+        "short": "short description for foundry_agent_teams_app",
+        "full": "full description for foundry_agent_teams_app"
     },
     "accentColor": "#FFFFFF",
     "copilotAgents": {
