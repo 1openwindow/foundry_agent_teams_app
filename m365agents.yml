@@ -42,6 +42,99 @@ provision:
       # will use bicep CLI in PATH if you remove this config.
       bicepCliVersion: v0.9.1
 
+  # Grant the bot managed identity access to your Foundry Project.
+  # This avoids manual IAM steps when launching the deployed bot in Teams.
+  - uses: script
+    name: grant Foundry access (Azure AI User)
+    with:
+      timeout: 600000
+      run: |
+        set -euo pipefail
+
+        az_scope_args=("--subscription" "${AZURE_SUBSCRIPTION_ID}")
+        if [[ -n "${AZURE_RESOURCE_GROUP_NAME:-}" ]]; then
+          az_scope_args+=("--resource-group" "${AZURE_RESOURCE_GROUP_NAME}")
+        fi
+
+        scope="${FOUNDRY_PROJECT_RESOURCE_ID:-}"
+        if [[ -z "${scope}" ]]; then
+          if [[ -z "${FOUNDRY_PROJECT_ENDPOINT:-}" ]]; then
+            echo "Set FOUNDRY_PROJECT_RESOURCE_ID (preferred) or FOUNDRY_PROJECT_ENDPOINT."
+            exit 1
+          fi
+
+          # Best-effort discovery from endpoint host:
+          # https://<resource>.services.ai.azure.com/api/projects/<project>
+          endpoint="${FOUNDRY_PROJECT_ENDPOINT}"
+          host="${endpoint#http://}"
+          host="${host#https://}"
+          host="${host%%/*}"
+          resource_name="${host%%.*}"
+
+          if [[ -z "${resource_name}" ]]; then
+            echo "Failed to parse resource name from FOUNDRY_PROJECT_ENDPOINT=${FOUNDRY_PROJECT_ENDPOINT}"
+            exit 1
+          fi
+
+          match_count=$(az resource list "${az_scope_args[@]}" --name "${resource_name}" --query "length(@)" -o tsv 2>/dev/null || echo "0")
+          if [[ "${match_count}" == "0" ]]; then
+            echo "No Azure resource named ${resource_name} found in subscription ${AZURE_SUBSCRIPTION_ID}."
+            echo "Set FOUNDRY_PROJECT_RESOURCE_ID explicitly."
+            exit 1
+          fi
+          if [[ "${match_count}" != "1" ]]; then
+            echo "Multiple resources named ${resource_name} found; set FOUNDRY_PROJECT_RESOURCE_ID explicitly."
+            az resource list "${az_scope_args[@]}" --name "${resource_name}" --query "[].{id:id,type:type,resourceGroup:resourceGroup,location:location}" -o table || true
+            exit 1
+          fi
+
+          scope=$(az resource list "${az_scope_args[@]}" --name "${resource_name}" --query "[0].id" -o tsv)
+        fi
+
+        assignee_object_id="${BOT_MANAGED_IDENTITY_PRINCIPAL_ID:-}"
+        if [[ -z "${assignee_object_id}" ]]; then
+          if [[ -n "${BOT_AZURE_APP_SERVICE_RESOURCE_ID:-}" ]]; then
+            # Resolve the user-assigned identity's principalId from the App Service
+            assignee_object_id=$(az webapp identity show \
+              --ids "${BOT_AZURE_APP_SERVICE_RESOURCE_ID}" \
+              --query "userAssignedIdentities | values(@)[0].principalId" -o tsv 2>/dev/null || true)
+          fi
+        fi
+
+        if [[ -z "${assignee_object_id}" ]]; then
+          if [[ -n "${BOT_ID:-}" ]]; then
+            # BOT_ID is the managed identity clientId; resolve its service principal object id.
+            assignee_object_id=$(az ad sp show --id "${BOT_ID}" --query id -o tsv 2>/dev/null || true)
+          fi
+        fi
+
+        if [[ -z "${assignee_object_id}" ]]; then
+          echo "Unable to determine bot managed identity object id. Ensure BOT_AZURE_APP_SERVICE_RESOURCE_ID is set (after provision)."
+          exit 1
+        fi
+
+        echo "Ensuring Azure AI User role assignment on Foundry scope..."
+        existing=$(az role assignment list \
+          --assignee-object-id "${assignee_object_id}" \
+          --scope "${scope}" \
+          --role "Azure AI User" \
+          --query "[0].id" -o tsv || true)
+
+        if [[ -z "${existing}" ]]; then
+          az role assignment create \
+            --assignee-object-id "${assignee_object_id}" \
+            --assignee-principal-type ServicePrincipal \
+            --role "Azure AI User" \
+            --scope "${scope}"
+        else
+          echo "Role assignment already exists: ${existing}"
+        fi
+
+        if [[ -n "${BOT_AZURE_APP_SERVICE_RESOURCE_ID:-}" ]]; then
+          echo "Restarting App Service to pick up new permissions..."
+          az webapp restart --ids "${BOT_AZURE_APP_SERVICE_RESOURCE_ID}"
+        fi
+
   # Validate using manifest schema
   - uses: teamsApp/validateManifest
     with:
